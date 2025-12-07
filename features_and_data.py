@@ -1,5 +1,3 @@
-# features_and_data.py
-
 import pandas as pd
 import numpy as np
 import os
@@ -9,10 +7,13 @@ PRICE_FILE = "price_history.csv"
 
 def load_price_data():
     """
-    Loads the price history dataset from the data folder.
+    Loads the price history dataset from the data folder
+    and sorts it by product_id, size, date so that
+    indices are consistent for features and targets.
     """
     path = os.path.join(DATA_DIR, PRICE_FILE)
     df = pd.read_csv(path, parse_dates=["date"])
+    df = df.sort_values(["product_id", "size", "date"]).reset_index(drop=True)
     return df
 
 def build_features():
@@ -42,7 +43,7 @@ def build_features():
     ]
 
     # Categorical columns (we will one-hot encode these)
-    cat_cols = ["event_flag", "reason_label"]   # we can use reason_label as input too (rule-based)
+    cat_cols = ["event_flag", "reason_label"]   # we can use reason_label as input too
 
     # One-hot encode categorical columns
     df_cat = pd.get_dummies(df[cat_cols], prefix=cat_cols, drop_first=True)
