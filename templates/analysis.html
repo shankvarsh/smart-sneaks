@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1 class="mb-4">Smart Sneaks &mdash; Data & Model Analysis</h1>
+
+<div class="mb-4">
+  <h5>Dataset Overview</h5>
+  <p>
+    The synthetic dataset simulates Nike sneakers listed on Myntra over a two-year period ({{ date_min }} to {{ date_max }}).
+    It contains {{ total_products }} distinct products and {{ total_rows }} daily price records across sizes.
+  </p>
+  <ul>
+    <li><strong>Target 1:</strong> <code>is_good_buy</code> &mdash; binary label indicating if the given day is close to the best price in its forward horizon.</li>
+    <li><strong>Target 2:</strong> <code>future_drop_pct</code> &mdash; maximum expected future price drop within a fixed horizon.</li>
+  </ul>
+</div>
+
+<div class="mb-4">
+  <h5>Feature Engineering (for the models)</h5>
+  <p>
+    The model uses a combination of numeric and categorical features derived from the raw time-series:
+  </p>
+  <ul>
+    {% for f in feature_cols %}
+      <li><code>{{ f }}</code></li>
+    {% endfor %}
+  </ul>
+  <p class="small text-muted">
+    Categorical features (event flags and internal reason labels) are one-hot encoded, and time features are extracted via
+    <code>dayofweek</code> and <code>month</code> to capture weekly and seasonal patterns.
+  </p>
+</div>
+
+<div class="mb-4">
+  <h5>Modeling Approach</h5>
+  <ul>
+    <li>
+      <strong>Classifier:</strong> RandomForestClassifier on <code>is_good_buy</code> to estimate
+      the probability that today is a good buying opportunity.
+    </li>
+    <li>
+      <strong>Regressor:</strong> RandomForestRegressor on <code>future_drop_pct</code> to estimate
+      the magnitude of potential future price drop.
+    </li>
+  </ul>
+  <p class="small text-muted">
+    Train–test splits, feature importance, and evaluation metrics (accuracy, F1, MAE, RMSE, R²) are available on the Evaluation page.
+  </p>
+</div>
+
+<div class="mb-4">
+  <h5>End-to-End Pipeline</h5>
+  <ol>
+    <li>Generate synthetic time-series data with realistic seasonal and scenario-based pricing patterns.</li>
+    <li>Engineer features and construct labels using forward-looking windows on the time-series.</li>
+    <li>Train the classifier and regressor models on the historical data.</li>
+    <li>At inference time, extract the latest product-size snapshot and feed it into the models.</li>
+    <li>Combine model outputs with rule-based logic to generate human-readable recommendations and explanations.</li>
+  </ol>
+</div>
+{% endblock %}

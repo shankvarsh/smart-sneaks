@@ -48,3 +48,9 @@ body {
 .smart-navbar .navbar-brand {
   letter-spacing: 0.04em;
 }
+
+.navbar-brand {
+  font-size: 1.4rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
