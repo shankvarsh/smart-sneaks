@@ -1,0 +1,50 @@
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.smart-navbar {
+  background: linear-gradient(90deg, #111827, #1f2937);
+}
+
+.smart-footer {
+  background-color: #f3f4f6;
+  border-top: 1px solid #e5e7eb;
+}
+
+.product-card img {
+  object-fit: cover;
+  height: 200px;
+}
+
+.product-card {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+.product-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.08);
+}
+
+.card-title {
+  font-size: 1rem;
+}
+
+.btn-primary {
+  background: linear-gradient(90deg, #2563eb, #4f46e5);
+  border: none;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(90deg, #1d4ed8, #4338ca);
+}
+
+.badge.bg-success-subtle {
+  background-color: #dcfce7;
+  color: #15803d;
+}
+
+.smart-navbar .navbar-brand {
+  letter-spacing: 0.04em;
+}

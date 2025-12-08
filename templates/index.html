@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1 class="mb-4 fw-bold">Nike on Myntra &mdash; Smart Sneaks Watchlist</h1>
+
+<div class="row g-4">
+  {% for p in products %}
+    <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+      <div class="card product-card h-100 shadow-sm">
+        <img src="{{ p.image_url }}" class="card-img-top" alt="{{ p.name }}">
+        <div class="card-body d-flex flex-column">
+          <h5 class="card-title">{{ p.name }}</h5>
+          <p class="card-text mb-1 text-muted small">
+            {{ p.category|capitalize }} &middot; {{ p.gender|capitalize }}
+          </p>
+          {% if p.min_selling_price %}
+            <p class="card-text fw-semibold">
+              From ₹{{ "%.0f"|format(p.min_selling_price) }}
+            </p>
+          {% else %}
+            <p class="card-text text-muted">No price data</p>
+          {% endif %}
+          <div class="mt-auto">
+            <a href="{{ url_for('product_detail', product_id=p.product_id) }}" class="btn btn-primary w-100">
+              View insights
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

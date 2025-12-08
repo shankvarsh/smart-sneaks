@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1 class="mb-4">Model Evaluation &mdash; Internal View</h1>
+
+<div class="row">
+  <div class="col-md-6">
+    <div class="card shadow-sm mb-3">
+      <div class="card-body">
+        <h5 class="card-title">Buy-Now Classifier (is_good_buy)</h5>
+        <p class="mb-1"><strong>Accuracy:</strong> {{ "%.3f"|format(clf.accuracy) }}</p>
+        <p class="mb-1"><strong>Precision:</strong> {{ "%.3f"|format(clf.precision) }}</p>
+        <p class="mb-1"><strong>Recall:</strong> {{ "%.3f"|format(clf.recall) }}</p>
+        <p class="mb-1"><strong>F1-score:</strong> {{ "%.3f"|format(clf.f1_score) }}</p>
+        <hr>
+        <p class="small text-muted mb-0">
+          Full classification report is stored in JSON. You can use this panel
+          to discuss performance during your viva.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card shadow-sm mb-3">
+      <div class="card-body">
+        <h5 class="card-title">Future Drop Regressor (future_drop_pct)</h5>
+        <p class="mb-1"><strong>MAE:</strong> {{ "%.4f"|format(reg.mae) }}</p>
+        <p class="mb-1"><strong>RMSE:</strong> {{ "%.4f"|format(reg.rmse) }}</p>
+        <p class="mb-1"><strong>R²:</strong> {{ "%.4f"|format(reg.r2) }}</p>
+        <hr>
+        <p class="small text-muted mb-0">
+          These values summarise how well the model predicts max future drop
+          in discount for a shoe-size combination.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
