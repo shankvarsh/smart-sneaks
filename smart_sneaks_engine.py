@@ -130,36 +130,55 @@ def get_recommendation(product_id: str, size: float) -> dict:
 
     # Classifier prediction (probability of is_good_buy = 1)
     prob_good_buy = clf.predict_proba(X_row)[0][1]
-    is_good_buy_pred = prob_good_buy >= 0.5
+    future_drop_pred = reg.predict(X_row)[0]
+
+    # Classifier prediction (probability of is_good_buy = 1)
+    prob_good_buy = clf.predict_proba(X_row)[0][1]
 
     # Regressor prediction (expected max future price drop from today)
     future_drop_pred = reg.predict(X_row)[0]  # between ~0 and 0.6 in synthetic data
 
-    # Current price
+    # Current price info
     current_price = float(latest_row["selling_price"])
     mrp = float(latest_row["mrp"])
+
+    # Ground-truth label from our dataset for this latest point
+    label_latest = int(latest_row.get("is_good_buy", 0))
 
     # Convert drop to %
     future_drop_pct = max(0.0, float(future_drop_pred))
     future_drop_pct_display = round(future_drop_pct * 100, 1)
 
+    # --- Hybrid decision rule ---
+    # Start from the ground-truth label for the latest date
+    is_good_buy_pred = (label_latest == 1)
+
+    # If model is very confident "good buy" and future drop is small, force YES
+    if prob_good_buy >= 0.65 and future_drop_pct < 0.15:
+        is_good_buy_pred = True
+
+    # If model is not confident and future drop is big, force NO
+    if prob_good_buy < 0.5 and future_drop_pct > 0.20:
+        is_good_buy_pred = False
+
     # Build a simple recommendation
     if is_good_buy_pred:
         if future_drop_pct < 0.05:
             rec_text = (
-                "Good time to buy now. The model expects very limited further price drop "
+                "Strong signal to buy now. The model expects very limited further price drop "
                 f"(around {future_drop_pct_display}% at most)."
             )
         else:
             rec_text = (
-                "This is likely a good time to buy. The model still expects some possible "
-                f"additional drop (~{future_drop_pct_display}%), but current discount is strong."
+                "Good time to buy. The model expects some additional drop "
+                f"(around {future_drop_pct_display}%), but current discount is attractive."
             )
     else:
         rec_text = (
-            "The model suggests waiting. It expects a higher chance of a future price drop, "
+            "The model suggests waiting. It expects a meaningful chance of a future price drop, "
             f"potentially around {future_drop_pct_display}% from today's price."
         )
+        
 
     # Reason explanation (rule-based, using latest_row fields)
     event_flag = latest_row["event_flag"]

@@ -82,6 +82,16 @@ def product_detail(product_id):
 
     # Historical price for this product+size (past N days)
     df_ps_size = df_ps_all[df_ps_all["size"] == selected_size].sort_values("date")
+        # Best buy date in 2026 (min price in 2026 for this product+size)
+    df_2026 = df_ps_size[df_ps_size["date"].dt.year == 2026]
+    if df_2026.empty:
+        best_buy_date_2026 = None
+        best_buy_price_2026 = None
+    else:
+        idx_min = df_2026["selling_price"].idxmin()
+        best_row = df_2026.loc[idx_min]
+        best_buy_date_2026 = best_row["date"].date().isoformat()
+        best_buy_price_2026 = float(best_row["selling_price"])
     hist_days = 60
     df_hist = df_ps_size.tail(hist_days)
 
@@ -115,6 +125,8 @@ def product_detail(product_id):
         mrp=mrp,
         current_price=current_price,
         current_discount_pct=current_discount_pct,
+        best_buy_date_2026=best_buy_date_2026,
+        best_buy_price_2026=best_buy_price_2026,
     )
 
 @app.route("/admin/metrics")

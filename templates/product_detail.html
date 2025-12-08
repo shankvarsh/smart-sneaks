@@ -4,7 +4,9 @@
 <div class="row">
   <div class="col-md-5">
     <div class="card shadow-sm mb-3">
-      <img src="{{ product.image_url }}" class="card-img-top" alt="{{ product.name }}">
+      <img src="{{ url_for('static', filename='img/' ~ product.product_id ~ '.jpeg') }}"
+            class="card-img-top"
+            alt="{{ product.name }}">
       <div class="card-body">
         <h3 class="card-title">{{ product.name }}</h3>
         <p class="text-muted mb-1">
@@ -63,6 +65,15 @@
           ~{{ "%.1f"|format(recommendation.predicted_future_drop_pct) }}%
         </p>
         <p class="mt-2">{{ recommendation.recommendation_text }}</p>
+
+        {% if best_buy_date_2026 %}
+        <p class="small text-primary mb-1">
+          Best estimated price in 2026 around: <strong>{{ best_buy_date_2026 }}</strong>
+          (approx. ₹{{ "%.0f"|format(best_buy_price_2026) }})
+        </p>
+        <p id="countdown" class="small text-muted mb-2"></p>
+        {% endif %}
+
         <hr>
         <p class="small text-muted mb-0">
           Why? {{ recommendation.reason_explanation }}
@@ -97,7 +108,14 @@
 {% block scripts %}
 {{ super() }}
 <script type="application/json" id="ss-data">
-{{ {'dates': dates, 'prices': prices, 'current_price': current_price, 'estimated_best_price': estimated_best_price, 'future_date_label': future_date_label}|tojson }}
+{{ {
+    'dates': dates,
+    'prices': prices,
+    'current_price': current_price,
+    'estimated_best_price': estimated_best_price,
+    'future_date_label': future_date_label,
+    'best_buy_date_2026': best_buy_date_2026|default(None)
+  } | tojson }}
 </script>
 <script>
 (function() {
@@ -162,7 +180,33 @@
             }
         }
     });
+        // ------- Countdown to best 2026 date (if available) -------
+    var bestDateStr = (__ss_server_data.best_buy_date_2026 !== undefined && __ss_server_data.best_buy_date_2026 !== null)? __ss_server_data.best_buy_date_2026: null;
+    function updateCountdown() {
+        if (!bestDateStr) return;
+        var target = new Date(bestDateStr + "T00:00:00");
+        var now = new Date();
 
+        var diff = target - now;
+        var el = document.getElementById('countdown');
+        if (!el) return;
+
+        if (diff <= 0) {
+            el.textContent = "Best buy window in 2026 is active or has passed.";
+            return;
+        }
+
+        var days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        var hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+        var mins = Math.floor((diff / (1000 * 60)) % 60);
+
+        el.textContent = "Time until best 2026 price: " + days + "d " + hours + "h " + mins + "m";
+    }
+
+    updateCountdown();
+    setInterval(updateCountdown, 60000);  
+    
+    // update every minute
 })();   // End IIFE
 </script>
 {% endblock %}
