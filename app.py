@@ -3,7 +3,7 @@
 from flask import Flask, render_template, request
 import os
 import pandas as pd
-
+import numpy as np
 from features_and_data import load_price_data
 from smart_sneaks_engine import get_recommendation
 
@@ -58,19 +58,20 @@ def product_detail(product_id):
     Product page: details for one product + size selector + charts + AI recommendation.
     """
     # Get product row
-    product = df_products[df_products["product_id"] == product_id]
-    if product.empty:
+    product_df = df_products[df_products["product_id"] == product_id]
+    if product_df.empty:
         return f"Product {product_id} not found", 404
-    product = product.iloc[0].to_dict()
+    product = product_df.iloc[0].to_dict()
 
-    # All sizes available for this product
+    # All rows for this product
     df_ps_all = df_price[df_price["product_id"] == product_id]
     if df_ps_all.empty:
         return f"No price data for product {product_id}", 404
 
+    # All sizes available
     sizes = sorted(df_ps_all["size"].unique().tolist())
 
-    # Get selected size from query param, default to first size
+    # Selected size from query param, default first
     size_param = request.args.get("size")
     if size_param is None:
         selected_size = sizes[0]
@@ -80,25 +81,57 @@ def product_detail(product_id):
         except ValueError:
             selected_size = sizes[0]
 
-    # Historical price for this product+size (past N days)
+    # Time series for this product + size
     df_ps_size = df_ps_all[df_ps_all["size"] == selected_size].sort_values("date")
-        # Best buy date in 2026 (min price in 2026 for this product+size)
+    if df_ps_size.empty:
+        return f"No price data for product {product_id} size {selected_size}", 404
+
+    # History window for charts (last N days)
+    hist_days = 60
+    df_hist = df_ps_size.tail(hist_days)
+
+    dates = df_hist["date"].dt.strftime("%Y-%m-%d").tolist()
+    prices = df_hist["selling_price"].tolist()
+
+    # --- Best buy date in 2026 ---
     df_2026 = df_ps_size[df_ps_size["date"].dt.year == 2026]
     if df_2026.empty:
         best_buy_date_2026 = None
         best_buy_price_2026 = None
     else:
         idx_min = df_2026["selling_price"].idxmin()
-        best_row = df_2026.loc[idx_min]
-        best_buy_date_2026 = best_row["date"].date().isoformat()
-        best_buy_price_2026 = float(best_row["selling_price"])
-    hist_days = 60
-    df_hist = df_ps_size.tail(hist_days)
+        best_row_2026 = df_2026.loc[idx_min]
+        best_buy_date_2026 = best_row_2026["date"].date().isoformat()
+        best_buy_price_2026 = float(best_row_2026["selling_price"])
 
-    dates = df_hist["date"].dt.strftime("%Y-%m-%d").tolist()
-    prices = df_hist["selling_price"].tolist()
-    
-    # Build a human-friendly summary of recent price behaviour
+    # --- AI recommendation from engine ---
+    recommendation = get_recommendation(product_id, selected_size)
+
+    current_price = recommendation["current_price"]
+    mrp = recommendation["mrp"]
+    current_discount_pct = recommendation["current_discount_pct"]
+    future_drop_pct = recommendation["predicted_future_drop_pct"]
+
+    # Estimated future best price (simple bar chart)
+    estimated_best_price = round(current_price * (1 - future_drop_pct / 100.0), 2)
+    future_date_label = "Next 30 days (est.)"
+
+    # Latest snapshot row for this size
+    latest_row = df_ps_size.iloc[-1].to_dict()
+
+    # --- Out-of-stock: estimate restock ---
+    restock_date = None
+    restock_price = None
+    latest_date = df_ps_size["date"].max()
+    if latest_row["inventory_level"] == 0:
+        future_rows = df_ps_size[df_ps_size["date"] > latest_date]
+        future_instock = future_rows[future_rows["inventory_level"] > 0]
+        if not future_instock.empty:
+            first_restock = future_instock.iloc[0]
+            restock_date = first_restock["date"].date().isoformat()
+            restock_price = float(first_restock["selling_price"])
+
+    # --- Series summary for explanation card ---
     if len(df_hist) >= 2:
         start_price = float(df_hist["selling_price"].iloc[0])
         end_price = float(df_hist["selling_price"].iloc[-1])
@@ -125,34 +158,10 @@ def product_detail(product_id):
             f"with a price volatility (standard deviation) of roughly ₹{volatility:.0f}."
         )
     else:
-        series_summary = "Not enough historical data is available to summarise the recent price behaviour for this size."
+        series_summary = (
+            "Not enough historical data is available to summarise the recent price behaviour for this size."
+        )
 
-
-    # AI recommendation using our engine
-    recommendation = get_recommendation(product_id, selected_size)
-
-    current_price = recommendation["current_price"]
-    mrp = recommendation["mrp"]
-    current_discount_pct = recommendation["current_discount_pct"]
-    future_drop_pct = recommendation["predicted_future_drop_pct"]
-
-    estimated_best_price = round(current_price * (1 - future_drop_pct / 100.0), 2)
-    future_date_label = "Next 30 days (est.)"
-
-    latest_row = df_ps_size.iloc[-1].to_dict()
-    # Out-of-stock handling: estimate restock date & price from future rows
-    restock_date = None
-    restock_price = None
-    latest_date = df_ps_size["date"].max()
-
-    if latest_row["inventory_level"] == 0:
-        future_rows = df_ps_size[df_ps_size["date"] > latest_date]
-        future_instock = future_rows[future_rows["inventory_level"] > 0]
-        if not future_instock.empty:
-            first_restock = future_instock.iloc[0]
-            restock_date = first_restock["date"].date().isoformat()
-            restock_price = float(first_restock["selling_price"])
-    
     return render_template(
         "product_detail.html",
         product=product,
@@ -172,6 +181,129 @@ def product_detail(product_id):
         restock_date=restock_date,
         restock_price=restock_price,
         series_summary=series_summary,
+    )
+
+@app.route("/analysis")
+def data_analysis():
+    """
+    Data analysis / methodology overview page.
+    Uses the actual synthetic dataset to compute stats that we then visualise with Chart.js,
+    and shows notebook-like code snippets.
+    """
+    df = df_price  # global loaded via load_price_data()
+    products = df_products
+
+    total_products = products["product_id"].nunique()
+    total_rows = len(df)
+    date_min = df["date"].min().date().isoformat()
+    date_max = df["date"].max().date().isoformat()
+
+    # Distribution of discount_pct (bucketed)
+    discount_bins = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 1.0]
+    discount_labels = ["0–10%", "10–20%", "20–30%", "30–40%", "40–50%", "50%+"]
+
+    cut_discount = pd.cut(
+        df["discount_pct"],
+        bins=discount_bins,
+        labels=discount_labels,
+        include_lowest=True,
+        right=False,
+    )
+    discount_counts = (
+        cut_discount.value_counts().reindex(discount_labels).fillna(0).astype(int).tolist()
+    )
+
+    # Distribution of inventory levels (bucketed)
+    inv_bins = [0, 1, 10, 20, 50, 100, 1000]
+    inv_labels = ["0", "1–9", "10–19", "20–49", "50–99", "100+"]
+
+    cut_inv = pd.cut(
+        df["inventory_level"],
+        bins=inv_bins,
+        labels=inv_labels,
+        include_lowest=True,
+        right=False,
+    )
+    inv_counts = (
+        cut_inv.value_counts().reindex(inv_labels).fillna(0).astype(int).tolist()
+    )
+
+    # Label distribution for is_good_buy
+    label_counts_series = df["is_good_buy"].value_counts()
+    good_count = int(label_counts_series.get(1, 0))
+    bad_count = int(label_counts_series.get(0, 0))
+
+    # Average future_drop_pct for good vs bad labels
+    grouped_drop = df.groupby("is_good_buy")["future_drop_pct"].mean()
+    avg_drop_good = float(grouped_drop.get(1, 0.0))
+    avg_drop_bad = float(grouped_drop.get(0, 0.0))
+
+    # Scenario-wise average discount
+    if "scenario" in df.columns:
+        scenario_stats = (
+            df.groupby("scenario")["discount_pct"]
+            .mean()
+            .sort_values(ascending=False)
+        )
+        scenario_names = scenario_stats.index.tolist()
+        scenario_avg_discount = (scenario_stats.values * 100).round(1).tolist()
+    else:
+        scenario_names = []
+        scenario_avg_discount = []
+
+    # Notebook-like code snippets to show on the page
+    code_read_data = """\
+import pandas as pd
+
+df_price = pd.read_csv("data/price_history.csv", parse_dates=["date"])
+df_products = pd.read_csv("data/products.csv")
+
+df_price.head()
+"""
+    code_features_targets = """\
+from features_and_data import build_features
+
+X, y_class, y_reg = build_features()
+
+X.sample(5)      # feature matrix
+y_class.head()   # is_good_buy labels
+y_reg.head()     # future_drop_pct regression targets
+"""
+    code_training = """\
+from train_buy_now_classifier import main as train_classifier
+from train_future_drop_regressor import main as train_regressor
+
+# Re-train models on the latest synthetic dataset
+train_classifier()
+train_regressor()
+"""
+    code_inference = """\
+from smart_sneaks_engine import get_recommendation
+
+rec = get_recommendation("NIK001", 9)
+rec
+"""
+
+    return render_template(
+        "analysis.html",
+        total_products=total_products,
+        total_rows=total_rows,
+        date_min=date_min,
+        date_max=date_max,
+        discount_labels=discount_labels,
+        discount_counts=discount_counts,
+        inv_labels=inv_labels,
+        inv_counts=inv_counts,
+        good_count=good_count,
+        bad_count=bad_count,
+        avg_drop_good=avg_drop_good,
+        avg_drop_bad=avg_drop_bad,
+        scenario_names=scenario_names,
+        scenario_avg_discount=scenario_avg_discount,
+        code_read_data=code_read_data,
+        code_features_targets=code_features_targets,
+        code_training=code_training,
+        code_inference=code_inference,
     )
 
 @app.route("/admin/metrics")
@@ -195,45 +327,6 @@ def admin_metrics():
         clf=clf_metrics,
         reg=reg_metrics,
     )
-
-
-@app.route("/analysis")
-def data_analysis():
-    """
-    Data analysis / methodology overview page.
-    Shows how the dataset is structured and how models are trained.
-    """
-    # Basic stats for display
-    total_products = df_products["product_id"].nunique()
-    total_rows = len(df_price)
-    date_min = df_price["date"].min().date().isoformat()
-    date_max = df_price["date"].max().date().isoformat()
-
-    # Feature columns used in the model
-    # (This should match features_and_data.build_features)
-    feature_cols = [
-        "discount_pct",
-        "inventory_level",
-        "rating_avg",
-        "num_reviews",
-        "demand_index",
-        "social_sentiment",
-        "news_sentiment",
-        "dayofweek",
-        "month",
-        "event_flag_*",
-        "reason_label_*",
-    ]
-
-    return render_template(
-        "analysis.html",
-        total_products=total_products,
-        total_rows=total_rows,
-        date_min=date_min,
-        date_max=date_max,
-        feature_cols=feature_cols,
-    )
-
     
 if __name__ == "__main__":
     app.run(debug=True)

@@ -3,59 +3,207 @@
 {% block content %}
 <h1 class="mb-4">Smart Sneaks &mdash; Data & Model Analysis</h1>
 
-<div class="mb-4">
-  <h5>Dataset Overview</h5>
+<section class="mb-4">
+  <h4>1. Raw Dataset Overview</h4>
   <p>
-    The synthetic dataset simulates Nike sneakers listed on Myntra over a two-year period ({{ date_min }} to {{ date_max }}).
-    It contains {{ total_products }} distinct products and {{ total_rows }} daily price records across sizes.
+    The synthetic dataset simulates Nike sneakers on Myntra from <strong>{{ date_min }}</strong>
+    to <strong>{{ date_max }}</strong>. It contains <strong>{{ total_products }}</strong> distinct
+    products and <strong>{{ total_rows }}</strong> daily records across product–size combinations.
   </p>
-  <ul>
-    <li><strong>Target 1:</strong> <code>is_good_buy</code> &mdash; binary label indicating if the given day is close to the best price in its forward horizon.</li>
-    <li><strong>Target 2:</strong> <code>future_drop_pct</code> &mdash; maximum expected future price drop within a fixed horizon.</li>
-  </ul>
-</div>
 
-<div class="mb-4">
-  <h5>Feature Engineering (for the models)</h5>
+  <h6 class="mt-3">Notebook snippet &mdash; loading the raw data</h6>
+  <pre class="bg-dark text-light p-3 rounded small"><code>{{ code_read_data }}</code></pre>
+</section>
+
+<section class="mb-4">
+  <h4>2. Discount and Inventory Distributions (before training)</h4>
+  <div class="row">
+    <div class="col-md-6 mb-3">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <h6 class="card-title">Discount (%) distribution</h6>
+          <canvas id="discountChart"></canvas>
+          <p class="small text-muted mt-2 mb-0">
+            This histogram shows how frequently each discount band appears. Higher bars on the right indicate
+            aggressive discounting is common.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6 mb-3">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <h6 class="card-title">Inventory level distribution</h6>
+          <canvas id="inventoryChart"></canvas>
+          <p class="small text-muted mt-2 mb-0">
+            The inventory histogram shows how often sizes sit at low, medium, or high stock levels. This drives
+            how soon discounts appear and how long they last.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="mb-4">
+  <h4>3. Target Variables: <code>is_good_buy</code> and <code>future_drop_pct</code></h4>
+  <div class="row">
+    <div class="col-md-6 mb-3">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <h6 class="card-title">Good buy vs not (latest labels)</h6>
+          <canvas id="labelChart"></canvas>
+          <p class="small text-muted mt-2 mb-0">
+            The label <code>is_good_buy</code> is derived from the underlying time-series: a day is labelled 1
+            if its price is close to the minimum over a forward horizon. This is what the classifier learns to
+            approximate.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6 mb-3">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <h6 class="card-title">Average future drop (%) by label</h6>
+          <p class="mb-1">
+            When <code>is_good_buy = 1</code>, the average future drop is
+            <strong>{{ "%.1f"|format(avg_drop_good * 100) }}%</strong>.
+          </p>
+          <p class="mb-1">
+            When <code>is_good_buy = 0</code>, the average future drop is
+            <strong>{{ "%.1f"|format(avg_drop_bad * 100) }}%</strong>.
+          </p>
+          <p class="small text-muted mb-0">
+            This separation validates that the label is meaningful: on “good buy” days, very little discount
+            is left on the table; on “wait” days, there is more room for future price drops.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h6 class="mt-3">Notebook snippet &mdash; building features and targets</h6>
+  <pre class="bg-dark text-light p-3 rounded small"><code>{{ code_features_targets }}</code></pre>
+</section>
+
+<section class="mb-4">
+  <h4>4. Scenario-wise Discount Behaviour</h4>
+  <div class="card shadow-sm mb-3">
+    <div class="card-body">
+      <h6 class="card-title">Average discount by pricing scenario</h6>
+      <canvas id="scenarioChart"></canvas>
+      <p class="small text-muted mt-2 mb-0">
+        Each product belongs to a synthetic pricing scenario such as <em>steady_discount</em>, <em>festival_spikes</em>,
+        <em>clearance_late</em>, or <em>hype_then_drop</em>. This helps the model see different patterns of price evolution.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="mb-4">
+  <h4>5. Modeling Pipeline (Training & Inference)</h4>
   <p>
-    The model uses a combination of numeric and categorical features derived from the raw time-series:
+    Two models are trained on this feature space:
   </p>
-  <ul>
-    {% for f in feature_cols %}
-      <li><code>{{ f }}</code></li>
-    {% endfor %}
-  </ul>
-  <p class="small text-muted">
-    Categorical features (event flags and internal reason labels) are one-hot encoded, and time features are extracted via
-    <code>dayofweek</code> and <code>month</code> to capture weekly and seasonal patterns.
-  </p>
-</div>
-
-<div class="mb-4">
-  <h5>Modeling Approach</h5>
   <ul>
     <li>
-      <strong>Classifier:</strong> RandomForestClassifier on <code>is_good_buy</code> to estimate
-      the probability that today is a good buying opportunity.
+      A <strong>RandomForestClassifier</strong> that predicts <code>is_good_buy</code>, i.e. the probability that
+      today is a good buying opportunity.
     </li>
     <li>
-      <strong>Regressor:</strong> RandomForestRegressor on <code>future_drop_pct</code> to estimate
-      the magnitude of potential future price drop.
+      A <strong>RandomForestRegressor</strong> that predicts <code>future_drop_pct</code>, i.e. how much additional
+      discount is likely within the horizon.
     </li>
   </ul>
-  <p class="small text-muted">
-    Train–test splits, feature importance, and evaluation metrics (accuracy, F1, MAE, RMSE, R²) are available on the Evaluation page.
-  </p>
-</div>
 
-<div class="mb-4">
-  <h5>End-to-End Pipeline</h5>
-  <ol>
-    <li>Generate synthetic time-series data with realistic seasonal and scenario-based pricing patterns.</li>
-    <li>Engineer features and construct labels using forward-looking windows on the time-series.</li>
-    <li>Train the classifier and regressor models on the historical data.</li>
-    <li>At inference time, extract the latest product-size snapshot and feed it into the models.</li>
-    <li>Combine model outputs with rule-based logic to generate human-readable recommendations and explanations.</li>
-  </ol>
-</div>
+  <h6>Notebook snippet &mdash; training the models</h6>
+  <pre class="bg-dark text-light p-3 rounded small"><code>{{ code_training }}</code></pre>
+
+  <h6 class="mt-3">Notebook snippet &mdash; making a recommendation</h6>
+  <pre class="bg-dark text-light p-3 rounded small"><code>{{ code_inference }}</code></pre>
+
+  <p class="small text-muted">
+    In the web app, the same inference logic is called from the product detail page: for a given product and size,
+    we fetch the latest snapshot, build its feature vector, and ask both models whether to <em>buy now</em> or
+    <em>wait</em>. The Evaluation tab shows metrics such as accuracy, F1-score, MAE, RMSE, and R² computed on a hold-out set.
+  </p>
+</section>
 {% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+  // Data from Flask (directly as JSON)
+const data = JSON.parse(document.getElementById("analysis-data").textContent);
+
+const discountLabels = data.discount_labels;
+const discountCounts = data.discount_counts;
+
+const invLabels = data.inv_labels;
+const invCounts = data.inv_counts;
+
+const goodCount = data.good_count;
+const badCount  = data.bad_count;
+
+const scenarioNames = data.scenario_names;
+const scenarioAvgDiscount = data.scenario_avg_discount;
+  // Discount histogram
+  const ctxDiscount = document.getElementById('discountChart').getContext('2d');
+  new Chart(ctxDiscount, {
+    type: 'bar',
+    data: {
+      labels: discountLabels,
+      datasets: [{
+        label: 'Number of records',
+        data: discountCounts
+      }]
+    },
+    options: { responsive: true }
+  });
+
+  // Inventory histogram
+  const ctxInventory = document.getElementById('inventoryChart').getContext('2d');
+  new Chart(ctxInventory, {
+    type: 'bar',
+    data: {
+      labels: invLabels,
+      datasets: [{
+        label: 'Number of records',
+        data: invCounts
+      }]
+    },
+    options: { responsive: true }
+  });
+
+  // Label distribution (pie chart)
+  const ctxLabel = document.getElementById('labelChart').getContext('2d');
+  new Chart(ctxLabel, {
+    type: 'pie',
+    data: {
+      labels: ['Good buy (1)', 'Wait (0)'],
+      datasets: [{
+        data: [goodCount, badCount]
+      }]
+    },
+    options: { responsive: true }
+  });
+
+  // Scenario-wise average discount
+  if (scenarioNames.length > 0) {
+    const ctxScenario = document.getElementById('scenarioChart').getContext('2d');
+    new Chart(ctxScenario, {
+      type: 'bar',
+      data: {
+        labels: scenarioNames,
+        datasets: [{
+          label: 'Average discount (%)',
+          data: scenarioAvgDiscount
+        }]
+      },
+      options: { responsive: true }
+    });
+  }
+</script>
+{% endblock %}
+
+    

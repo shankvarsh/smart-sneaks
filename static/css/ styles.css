@@ -3,7 +3,25 @@ body {
 }
 
 .smart-navbar {
-  background: linear-gradient(90deg, #111827, #1f2937);
+  background-color: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.navbar-light .navbar-nav .nav-link {
+  color: #111827;
+  font-weight: 500;
+}
+
+.navbar-light .navbar-nav .nav-link:hover,
+.navbar-light .navbar-nav .nav-link:focus {
+  color: #2563eb;
+}
+
+.navbar-brand {
+  font-size: 1.4rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #111827 !important;
 }
 
 .smart-footer {

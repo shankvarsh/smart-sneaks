@@ -181,14 +181,11 @@ def get_recommendation(product_id: str, size: float) -> dict:
         
 
     # Reason explanation (rule-based, using latest_row fields)
-    event_flag = latest_row["event_flag"]
+        event_flag = latest_row["event_flag"]
     discount_pct = float(latest_row["discount_pct"])
     social = float(latest_row["social_sentiment"])
     news = float(latest_row["news_sentiment"])
     inventory = int(latest_row["inventory_level"])
-    # If out of stock, don't recommend buying now, even if the price looks good
-    if inventory == 0:
-        is_good_buy_pred = False
     demand = float(latest_row.get("demand_index", 0.5))
     rating_avg = float(latest_row.get("rating_avg", 4.0))
     num_reviews = int(latest_row.get("num_reviews", 0))
@@ -196,69 +193,130 @@ def get_recommendation(product_id: str, size: float) -> dict:
 
     reasons = []
 
-    # Event / scenario
+    # 1) Scenario / event driven story
     if event_flag == "festival_sale":
-        reasons.append("Current pricing is strongly influenced by a festival or platform-wide sale period.")
+        reasons.append(
+            "The current price is driven by a festival or platform-wide sale window, "
+            "which typically creates short-lived but deep discounts."
+        )
     elif event_flag == "season_end":
-        reasons.append("Season-end clearance is pushing prices down for this model.")
+        reasons.append(
+            "Season-end clearance is actively pushing this model's price down as retailers "
+            "prepare for the next collection."
+        )
     else:
         if scenario == "steady_discount":
-            reasons.append("This model has followed a steady, gradual increase in discount over time.")
+            reasons.append(
+                "This shoe follows a steady discount pattern, where prices gradually drift down "
+                "over the product life-cycle rather than in sudden spikes."
+            )
         elif scenario == "festival_spikes":
-            reasons.append("This model mainly gets deep discounts around festival periods.")
+            reasons.append(
+                "Historically, this model only gets aggressive discounts around major sale events, "
+                "and prices are more stable outside those windows."
+            )
         elif scenario == "clearance_late":
-            reasons.append("Biggest discounts appear late in the product life-cycle as part of clearance.")
+            reasons.append(
+                "The biggest discounts for this model tend to appear late in its life-cycle as part of "
+                "clearance pushes."
+            )
         elif scenario == "hype_then_drop":
-            reasons.append("The shoe started as a premium/hyped release and only later received stronger discounts.")
+            reasons.append(
+                "This model behaved like a hype / premium launch initially and only started seeing "
+                "meaningful discounts later, once early demand cooled off."
+            )
         else:
-            reasons.append("No strong seasonal event is active; pricing is driven by normal marketplace dynamics.")
+            reasons.append(
+                "There is no strong event active right now; pricing is mostly driven by normal day-to-day demand."
+            )
 
-    # Discount level
-    if discount_pct > 0.40:
-        reasons.append("The current discount is very high compared to its usual behaviour, which is rare.")
-    elif discount_pct > 0.25:
-        reasons.append("The discount is strong and above the typical everyday level.")
-    elif discount_pct > 0.10:
-        reasons.append("The discount is moderate, closer to a regular sale than a major promotion.")
+    # 2) Discount level and its impact
+    if discount_pct >= 0.40:
+        reasons.append(
+            f"The current discount is very high at about {discount_pct * 100:.1f}%, close to its historical lows "
+            "for this size."
+        )
+    elif discount_pct >= 0.25:
+        reasons.append(
+            f"The discount is strong at roughly {discount_pct * 100:.1f}%, clearly better than a typical everyday sale."
+        )
+    elif discount_pct >= 0.10:
+        reasons.append(
+            f"The discount is moderate at around {discount_pct * 100:.1f}%, suggesting a regular promotional period "
+            "rather than a big event."
+        )
     else:
-        reasons.append("The discount is relatively small, indicating room for future cuts.")
-
-    # Demand vs inventory
-    if demand > 0.7 and inventory < 15:
-        reasons.append("Demand for this size is high while inventory is low, so prices may not drop much further.")
-    elif demand < 0.4 and inventory > 40:
-        reasons.append("Demand appears soft and inventory is comfortable, increasing chances of future discounts.")
-    elif demand > 0.7 and inventory > 40:
-        reasons.append("Both demand and inventory are high, so pricing is balanced between selling fast and clearing stock.")
-    else:
-        reasons.append("Demand and inventory are at intermediate levels for this size.")
-
-    # Sentiment and news
-    if social > 0.2:
-        reasons.append("Positive social media sentiment around this Nike line is supporting steady interest.")
-    elif social < -0.2:
-        reasons.append("Social buzz is slightly negative, which could pressure retailers into deeper discounts later.")
-
-    if news > 0.2:
-        reasons.append("Recent news about the brand is positive, which can stabilise prices.")
-    elif news < -0.2:
-        reasons.append("Recent negative news may push retailers towards more aggressive discounting.")
-
-    # Reviews / rating
-    if rating_avg >= 4.3 and num_reviews > 50:
-        reasons.append("Strong rating and a large number of reviews indicate solid product-market fit.")
-    elif rating_avg < 3.8 and num_reviews > 10:
-        reasons.append("Ratings are somewhat mixed, which can force retailers to compete more on price.")
-    elif num_reviews < 5:
-        reasons.append("Limited review data means the model relies more on price and inventory patterns here.")
-
-    if inventory == 0:
-        rec_text = (
-            "This size is currently out of stock. The model suggests waiting for a restock "
-            "window rather than trying to buy now."
+        reasons.append(
+            f"The discount is relatively small at only {discount_pct * 100:.1f}%, leaving room for deeper cuts later."
         )
 
-        
+    # 3) Demand vs inventory → story about stock pressure
+    if inventory == 0:
+        reasons.append(
+            "Inventory for this size is currently at zero, which prevents any purchase right now and may limit "
+            "how aggressively retailers discount in the very near term."
+        )
+    elif demand > 0.7 and inventory < 15:
+        reasons.append(
+            f"Demand for this size is high while only {inventory} pairs are left, so retailers have little incentive "
+            "to drop the price further."
+        )
+    elif demand < 0.4 and inventory > 40:
+        reasons.append(
+            f"Demand is on the weaker side and inventory is still around {inventory} pairs, which often forces "
+            "retailers to compete more on price."
+        )
+    elif demand > 0.7 and inventory > 40:
+        reasons.append(
+            f"Both demand and inventory are high, so pricing is a balance between selling fast and clearing stock, "
+            "leading to more controlled discount changes."
+        )
+    else:
+        reasons.append(
+            f"Demand and inventory for this size are at intermediate levels (around {inventory} pairs in stock), "
+            "so price moves are more gradual."
+        )
+
+    # 4) Social / news sentiment → story about trendiness
+    if social > 0.3:
+        reasons.append(
+            "Social media sentiment around this line is clearly positive, signalling that the model is trending and "
+            "can sustain demand even with slightly higher prices."
+        )
+    elif social < -0.3:
+        reasons.append(
+            "Social buzz is noticeably negative, which often translates into slower sales and pressure to discount "
+            "more aggressively."
+        )
+
+    if news > 0.3:
+        reasons.append(
+            "Recent news about the brand is positive, which generally stabilises demand and reduces the need for "
+            "panic discounting."
+        )
+    elif news < -0.3:
+        reasons.append(
+            "Recent negative news can reduce shoppers' confidence, making retailers more willing to push prices down "
+            "to stimulate demand."
+        )
+
+    # 5) Ratings / reviews → quality perception vs pricing
+    if rating_avg >= 4.3 and num_reviews > 50:
+        reasons.append(
+            f"The shoe holds a strong average rating of {rating_avg:.1f} from {num_reviews} reviews, which allows "
+            "it to hold price better without losing demand."
+        )
+    elif rating_avg < 3.8 and num_reviews > 10:
+        reasons.append(
+            f"Ratings around {rating_avg:.1f} from {num_reviews} reviews are somewhat mixed, so retailers often rely "
+            "on sharper discounts to keep the product moving."
+        )
+    elif num_reviews < 5:
+        reasons.append(
+            "Very few reviews are available for this model-size combination, so the model relies more on price and "
+            "inventory patterns than on user feedback."
+        )
+
     explanation_text = " ".join(reasons)
     
 
